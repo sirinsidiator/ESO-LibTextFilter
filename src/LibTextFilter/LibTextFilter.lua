@@ -3,18 +3,6 @@ local lib = LibStub:NewLibrary("LibTextFilter", 999) -- only for test purposes. 
 if not lib then
 	return	-- already loaded and no upgrade necessary
 end
--- support the following commands:
--- space, & => and (default)
--- +, | => or
--- -, ^ => exclude
--- ~ => compare itemID instead of full link (for item links only)
--- () => change operator precedence
-
--- and: find all words in dataset -> true if each word is found at least once, false otherwise
--- or: find any word in dataset -> true if first word is found, false if no word is found
--- exclude: find any word in dataset and prevent inclusion -> false if first word is found, true if no word is found
--- itemlink: compare like a word
--- ~itemlink: compare only id
 
 lib.RESULT_OK = 1
 lib.RESULT_INVALID_ARGUMENT_COUNT = 2
@@ -27,21 +15,62 @@ local function Convert(input, value)
 	return value
 end
 
+local function AndOperation(input, a, b)
+	a = Convert(input, a)
+	b = Convert(input, b)
+	return (a and b)
+end
+
+local function OrOperation(input, a, b)
+	a = Convert(input, a)
+	b = Convert(input, b)
+	return (a or b)
+end
+
+local function NotOperation(input, a)
+	return not Convert(input, a)
+end
+
+local function ItemIdOperation(input, a)
+	return false
+end
+
+local function PrintArray(array)
+	if(#array > 0) then
+		local output = {}
+		for i = 1, #array do
+			if(type(array[i]) == "table" and array[i].token) then
+				output[i] = "'" .. array[i].token .. "'"
+			elseif(type(array[i]) == "string") then
+				output[i] = "\"" .. array[i] .. "\""
+			else
+				output[i] = tostring(array[i])
+			end
+		end
+		return "{" .. table.concat(output, ", ") .. "}"
+	else
+		return "{}"
+	end
+end
+
+local function PrintToken(token)
+	if(type(token) == "table" and token.token ~= nil) then
+		return "'" .. token.token .. "'"
+	else
+		return "'" .. tostring(token) .. "'"
+	end
+end
+
 local OPERATORS = {
-	[" "] = { precedence = 1, numArguments = 2, operation = function(input, a, b)
-		a = Convert(input, a)
-		b = Convert(input, b)
-		return (a and b)
-	end, defaultArgument = true },
-	["+"] = { precedence = 1, numArguments = 2, operation = function(input, a, b)
-		a = Convert(input, a)
-		b = Convert(input, b)
-		return (a or b)
-	end, defaultArgument = false },
-	["-"] = { precedence = 2, isLeftAssociative = false, numArguments = 1, operation = function(input, a)
-		return not Convert(input, a)
-	end },
-	["~"] = { precedence = 3, isLeftAssociative = false, numArguments = 1, operation = function(a) return false end },
+	[" "] = { precedence = 2, numArguments = 2, operation = AndOperation, defaultArgument = true },
+	["&"] = { precedence = 2, numArguments = 2, operation = AndOperation, defaultArgument = true },
+	["+"] = { precedence = 3, numArguments = 2, operation = OrOperation, defaultArgument = false },
+	["|"] = { precedence = 3, numArguments = 2, operation = OrOperation, defaultArgument = false },
+	["-"] = { precedence = 4, isLeftAssociative = false, numArguments = 1, operation = NotOperation },
+	["!"] = { precedence = 4, isLeftAssociative = false, numArguments = 1, operation = NotOperation },
+	["^"] = { precedence = 4, isLeftAssociative = false, numArguments = 1, operation = NotOperation },
+	["~"] = { precedence = 5, isLeftAssociative = false, numArguments = 1, operation = ItemIdOperation },
+	["*"] = { precedence = 5, isLeftAssociative = false, numArguments = 1, operation = ItemIdOperation },
 	["("] = { isLeftParenthesis = true }, -- control operator
 	[")"] = { isRightParenthesis = true }, -- control operator
 	["\""] = {}, -- control operator, will be filtered before parsing
@@ -62,7 +91,7 @@ function lib:Tokenize(input)
 	local inQuotes = false
 	local lastTerm, lastOperator
 	for operator, term in (input):gmatch(TOKEN_MATCHING_PATTERN) do
-		--		print(string.format("'%s' '%s'", operator, term))
+		--		print(string.format("'%s' '%s' tokens: %s", operator, term, PrintArray(tokens)))
 		if(operator == "\"") then
 			inQuotes = not inQuotes
 			if(inQuotes) then
@@ -85,29 +114,36 @@ function lib:Tokenize(input)
 			if(operator == "(" or operator == ")") then
 				tokens[#tokens + 1] = lastOperator
 				lastOperator = nil
+				if(term == "") then
+					tokens[#tokens + 1] = operator
+					operator = nil
+				end
 			elseif(OPERATORS[operator].isLeftAssociative == false and not lastOperator and operator ~= "-") then
 				lastOperator = " "
 			end
-			if(term ~= "") then
-				if(operator == "-" and #tokens > 0 and not lastOperator) then
-					tokens[#tokens] = tokens[#tokens] .. operator .. term
-				else
-					if(OPERATORS[operator].isLeftAssociative == false) then
-						tokens[#tokens + 1] = lastOperator
-						lastOperator = nil
+			if(operator ~= nil) then
+				if(term ~= "") then
+					if(operator == "-" and #tokens > 0 and not lastOperator) then
+						tokens[#tokens] = tokens[#tokens] .. operator .. term
+					else
+						if(OPERATORS[operator].isLeftAssociative == false) then
+							tokens[#tokens + 1] = lastOperator
+							lastOperator = nil
+						end
+						tokens[#tokens + 1] = operator
+						tokens[#tokens + 1] = term
 					end
+				elseif(OPERATORS[operator].isLeftAssociative == false) then
+					tokens[#tokens + 1] = lastOperator
 					tokens[#tokens + 1] = operator
-					tokens[#tokens + 1] = term
+					lastOperator = nil
+				else
+					lastOperator = operator
 				end
-			elseif(OPERATORS[operator].isLeftAssociative == false) then
-				tokens[#tokens + 1] = lastOperator
-				tokens[#tokens + 1] = operator
-				lastOperator = nil
-			else
-				lastOperator = operator
 			end
 		end
 	end
+
 	if(inQuotes) then
 		tokens[#tokens + 1] = lastOperator
 		if(lastTerm ~= "") then
@@ -116,6 +152,7 @@ function lib:Tokenize(input)
 	elseif(lastOperator == "(" or lastOperator == ")") then
 		tokens[#tokens + 1] = lastOperator
 	end
+
 	return tokens
 		--			local _, itemLinkData = term:match("|H(.-):(.-)|h(.-)|h")
 		--			local isLink = (itemLinkData and itemLinkData ~= "")
@@ -164,24 +201,6 @@ function lib:Parse(tokens)
 		end
 	end
 	return output
-end
-
-local function PrintArray(array)
-	if(#array > 0) then
-		local output = {}
-		for i = 1, #array do output[i] = tostring(array[i]) end
-		return "{\"" .. table.concat(output, "\", \"") .. "\"}"
-	else
-		return "{}"
-	end
-end
-
-local function PrintToken(token)
-	if(type(token) == "table" and token.token ~= nil) then
-		return "'" .. token.token .. "'"
-	else
-		return "'" .. tostring(token) .. "'"
-	end
 end
 
 function lib:Evaluate(haystack, parsedTokens)

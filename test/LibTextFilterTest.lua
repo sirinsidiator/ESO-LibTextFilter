@@ -45,6 +45,9 @@ do -- setup tokenizer tests
 
 		-- 0-2 operator, two terms
 		{input = "A B", output = {" ", "A", " ", "B"}},
+		{input = "B A", output = {" ", "B", " ", "A"}},
+		{input = "A -B", output = {" ", "A", " ", "-", "B"}},
+		{input = "-B A", output = {" ", "-", "B", " ", "A"}},
 		{input = "A +B", output = {" ", "A", "+", "B"}},
 		{input = "A+B", output = {" ", "A", "+", "B"}},
 		{input = "+A B", output = {"+", "A", " ", "B"}},
@@ -70,6 +73,7 @@ do -- setup tokenizer tests
 		{input = "((A))", output = {" ", "(", "(", "A", ")", ")"}},
 		{input = "A (B+C)", output = {" ", "A", " ", "(", "B", "+", "C", ")"}},
 		{input = "A -(B+C)", output = {" ", "A", " ", "-", "(", "B", "+", "C", ")"}},
+		{input = "-(B+C) A", output = {" ", "-", "(", "B", "+", "C", ")", " ", "A"}},
 
 		-- quotes
 		{input = "\"A", output = {" ", "A"}},
@@ -108,11 +112,13 @@ do -- setup parser tests
 		{input = {" ", "(", "A"}, output = {"A", " "}},
 		{input = {" ", "(", "A", ")"}, output = {"A", " "}},
 		{input = {" ", "A", " ", "B"}, output = {"A", "B", " ", " "}},
+		{input = {" ", "A", " ", "-", "B"}, output = {"A", "B", "-", " ", " "}},
+		{input = {" ", "-", "B", " ", "A"}, output = {"B", "-", "A", " ", " "}},
 		{input = {" ", "A", "+", "B"}, output = {"A", "B", "+", " "}},
-		{input = {"+", "A", " ", "B"}, output = {"A", "B", " ", "+"}},
+		{input = {"+", "A", " ", "B"}, output = {"A", "+", "B", " "}},
 		{input = {" ", "A", " ", "B", " ", "C"}, output = {"A", "B", "C", " ", " ", " "}},
 		{input = {" ", "A", " ", "B", " ", "-", "C"}, output = {"A", "B", "C", "-", " ", " ", " "}},
-		{input = {" ", "A", "+", "B", " ", "-", "C"}, output = {"A", "B", "C", "-", " ", "+", " "}},
+		{input = {" ", "A", "+", "B", " ", "-", "C"}, output = {"A", "B", "+", "C", "-", " ", " "}},
 		{input = {" ", "A", " ", "-", "B", "+", "C"}, output = {"A", "B", "-", "C", "+", " ", " "}},
 		{input = {" ", "A", " ", "-", "(", "B", "+", "C", ")"}, output = {"A", "B", "C", "+", "-", " ", " "}},
 		{input = {" ", "some", " ", "~", "item", " ", "~", "name"}, output = {"some", "item", "~", "name", "~", " ", " ", " "}},
@@ -208,6 +214,18 @@ do -- setup filter tests
 		{input = {"motif 22: chapter 1: something", "chapter (1+\" 2:\")"}, output = {true, LTF.RESULT_OK}},
 		{input = {"motif 22: chapter 2: something", "chapter (1+\" 2:\")"}, output = {true, LTF.RESULT_OK}},
 		{input = {"motif 22: chapter 3: something", "chapter (1+\" 2:\")"}, output = {false, LTF.RESULT_OK}},
+		
+		{input = {"chevre-radish salad with pumpkin seeds recipe", "-(with+rabbit) recipe"}, output = {false, LTF.RESULT_OK}},
+		{input = {"imperial stout recipe", "-(with+rabbit) recipe"}, output = {true, LTF.RESULT_OK}},
+		{input = {"braised rabbit with spring vegetables recipe", "-(with+rabbit) recipe"}, output = {false, LTF.RESULT_OK}},
+		{input = {"garlic cod with potato crust recipe", "-(with+rabbit) recipe"}, output = {false, LTF.RESULT_OK}},
+		{input = {"imperial stout", "-(with+rabbit) recipe"}, output = {false, LTF.RESULT_OK}},
+		
+		{input = {"chevre-radish salad with pumpkin seeds recipe", "recipe -(with+rabbit)"}, output = {false, LTF.RESULT_OK}},
+		{input = {"imperial stout recipe", "recipe -(with+rabbit)"}, output = {true, LTF.RESULT_OK}},
+		{input = {"braised rabbit with spring vegetables recipe", "recipe -(with+rabbit)"}, output = {false, LTF.RESULT_OK}},
+		{input = {"garlic cod with potato crust recipe", "recipe -(with+rabbit)"}, output = {false, LTF.RESULT_OK}},
+		{input = {"imperial stout", "recipe -(with+rabbit)"}, output = {false, LTF.RESULT_OK}},
 	}
 
 TestLibTextFilter:CreateTestCases("Filter", testCases, function(input, expected)
