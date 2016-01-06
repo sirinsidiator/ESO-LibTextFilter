@@ -61,6 +61,10 @@ local function PrintToken(token)
 	end
 end
 
+local function Sanitize(value)
+	return value:gsub("[-*+?^$().[%]%%]", "%%%0") -- escape meta characters
+end
+
 local OPERATORS = {
 	[" "] = { precedence = 2, numArguments = 2, operation = AndOperation, defaultArgument = true },
 	["&"] = { precedence = 2, numArguments = 2, operation = AndOperation, defaultArgument = true },
@@ -78,7 +82,7 @@ local OPERATORS = {
 local OPERATOR_PATTERN = {}
 for token, data in pairs(OPERATORS) do
 	data.token = token
-	OPERATOR_PATTERN[#OPERATOR_PATTERN + 1] = token:gsub("[-*+?^$().[%]%%]", "%%%0") -- escape meta characters
+	OPERATOR_PATTERN[#OPERATOR_PATTERN + 1] = Sanitize(token)
 end
 OPERATOR_PATTERN = table.concat(OPERATOR_PATTERN, "|")
 local TOKEN_DUPLICATION_PATTERN = string.format("([%s])", OPERATOR_PATTERN)
@@ -221,7 +225,7 @@ function lib:Evaluate(haystack, parsedTokens)
 				stack[#stack + 1] = current.operation(haystack, unpack(args))
 			end
 		else
-			stack[#stack + 1] = current
+			stack[#stack + 1] = type(current) == "string" and Sanitize(current) or current
 		end
 	end
 

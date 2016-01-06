@@ -97,6 +97,8 @@ do -- setup tokenizer tests
 		{input = "some-item-name", output = {" ", "some-item-name"}},
 		{input = "some~item~name", output = {" ", "some", " ", "~", "item", " ", "~", "name"}},
 		{input = "\"some-item-name\"", output = {" ", "some-item-name"}},
+
+		-- errors
 	}
 
 TestLibTextFilter:CreateTestCases("Tokenizer", testCases, function(input, expected)
@@ -148,6 +150,9 @@ do -- setup evaluation tests
 		{input = {"B", {"A", "-", " "}}, output = {true, LTF.RESULT_OK}},
 		{input = {"ABC", {"A", "B", "C", "-", " ", " ", " "}}, output = {false, LTF.RESULT_OK}},
 		{input = {"ABD", {"A", "B", "C", "-", " ", " ", " "}}, output = {true, LTF.RESULT_OK}},
+		
+		-- errors
+		{input = {"ABC", {" ", ")-C"}}, output = {false, LTF.RESULT_INVALID_ARGUMENT_COUNT}},
 	}
 
 TestLibTextFilter:CreateTestCases("Evaluation", testCases, function(input, expected)
