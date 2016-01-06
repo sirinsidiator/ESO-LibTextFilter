@@ -8,33 +8,6 @@ lib.RESULT_OK = 1
 lib.RESULT_INVALID_ARGUMENT_COUNT = 2
 lib.RESULT_INVALID_VALUE_COUNT = 3
 
-local function Convert(input, value)
-	if(type(value) == "string") then
-		return (input:find(value) ~= nil)
-	end
-	return value
-end
-
-local function AndOperation(input, a, b)
-	a = Convert(input, a)
-	b = Convert(input, b)
-	return (a and b)
-end
-
-local function OrOperation(input, a, b)
-	a = Convert(input, a)
-	b = Convert(input, b)
-	return (a or b)
-end
-
-local function NotOperation(input, a)
-	return not Convert(input, a)
-end
-
-local function ItemIdOperation(input, a)
-	return false
-end
-
 local function PrintArray(array)
 	if(#array > 0) then
 		local output = {}
@@ -61,6 +34,44 @@ local function PrintToken(token)
 	end
 end
 
+local function Convert(input, value)
+	if(type(value) == "string") then
+		local _, linkData = value:match("|H(.-):(.-)|h(.-)|h")
+		if(linkData and linkData ~= "") then
+			value = linkData
+		end
+		return (input:find(value) ~= nil)
+	end
+	return value
+end
+
+local function AndOperation(input, a, b)
+	a = Convert(input, a)
+	b = Convert(input, b)
+	return (a and b)
+end
+
+local function OrOperation(input, a, b)
+	a = Convert(input, a)
+	b = Convert(input, b)
+	return (a or b)
+end
+
+local function NotOperation(input, a)
+	return not Convert(input, a)
+end
+
+local function LinkGeneralizationOperation(input, a)
+	local _, linkData = a:match("|H(.-):(.-)|h(.-)|h")
+	if(linkData and linkData ~= "") then
+		local data = {zo_strsplit(":", linkData)}
+		if(data[1] == "item") then
+			a = table.concat({"|H0:", data[1], ":", data[2], "|h|h"})
+		end
+	end
+	return a
+end
+
 local function Sanitize(value)
 	return value:gsub("[-*+?^$().[%]%%]", "%%%0") -- escape meta characters
 end
@@ -69,12 +80,12 @@ local OPERATORS = {
 	[" "] = { precedence = 2, numArguments = 2, operation = AndOperation, defaultArgument = true },
 	["&"] = { precedence = 2, numArguments = 2, operation = AndOperation, defaultArgument = true },
 	["+"] = { precedence = 3, numArguments = 2, operation = OrOperation, defaultArgument = false },
-	["|"] = { precedence = 3, numArguments = 2, operation = OrOperation, defaultArgument = false },
+	["/"] = { precedence = 3, numArguments = 2, operation = OrOperation, defaultArgument = false },
 	["-"] = { precedence = 4, isLeftAssociative = false, numArguments = 1, operation = NotOperation },
 	["!"] = { precedence = 4, isLeftAssociative = false, numArguments = 1, operation = NotOperation },
 	["^"] = { precedence = 4, isLeftAssociative = false, numArguments = 1, operation = NotOperation },
-	["~"] = { precedence = 5, isLeftAssociative = false, numArguments = 1, operation = ItemIdOperation },
-	["*"] = { precedence = 5, isLeftAssociative = false, numArguments = 1, operation = ItemIdOperation },
+	["~"] = { precedence = 5, isLeftAssociative = false, numArguments = 1, operation = LinkGeneralizationOperation },
+	["*"] = { precedence = 5, isLeftAssociative = false, numArguments = 1, operation = LinkGeneralizationOperation },
 	["("] = { isLeftParenthesis = true }, -- control operator
 	[")"] = { isRightParenthesis = true }, -- control operator
 	["\""] = {}, -- control operator, will be filtered before parsing
@@ -84,7 +95,7 @@ for token, data in pairs(OPERATORS) do
 	data.token = token
 	OPERATOR_PATTERN[#OPERATOR_PATTERN + 1] = Sanitize(token)
 end
-OPERATOR_PATTERN = table.concat(OPERATOR_PATTERN, "|")
+OPERATOR_PATTERN = table.concat(OPERATOR_PATTERN, "")
 local TOKEN_DUPLICATION_PATTERN = string.format("([%s])", OPERATOR_PATTERN)
 local TOKEN_MATCHING_PATTERN = string.format("([%s])(.-)[%s]", OPERATOR_PATTERN, OPERATOR_PATTERN)
 lib.OPERATORS = OPERATORS
@@ -94,6 +105,7 @@ function lib:Tokenize(input)
 	local tokens = {}
 	local inQuotes = false
 	local lastTerm, lastOperator
+
 	for operator, term in (input):gmatch(TOKEN_MATCHING_PATTERN) do
 		--		print(string.format("'%s' '%s' tokens: %s", operator, term, PrintArray(tokens)))
 		if(operator == "\"") then
@@ -158,8 +170,6 @@ function lib:Tokenize(input)
 	end
 
 	return tokens
-		--			local _, itemLinkData = term:match("|H(.-):(.-)|h(.-)|h")
-		--			local isLink = (itemLinkData and itemLinkData ~= "")
 end
 
 function lib:Parse(tokens)

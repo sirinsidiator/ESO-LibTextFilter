@@ -98,7 +98,12 @@ do -- setup tokenizer tests
 		{input = "some~item~name", output = {" ", "some", " ", "~", "item", " ", "~", "name"}},
 		{input = "\"some-item-name\"", output = {" ", "some-item-name"}},
 
-		-- errors
+		-- itemlinks
+		{input = "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", output = {" ", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}},
+		{input = "~|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", output = {" ", "~", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}},
+		{input = "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h |H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", output = {" ", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", " ", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}},
+
+	-- errors
 	}
 
 TestLibTextFilter:CreateTestCases("Tokenizer", testCases, function(input, expected)
@@ -125,6 +130,11 @@ do -- setup parser tests
 		{input = {" ", "A", " ", "-", "(", "B", "+", "C", ")"}, output = {"A", "B", "C", "+", "-", " ", " "}},
 		{input = {" ", "some", " ", "~", "item", " ", "~", "name"}, output = {"some", "item", "~", "name", "~", " ", " ", " "}},
 		{input = {" ", "some-item-name"}, output = {"some-item-name", " "}},
+
+		-- itemlinks
+		{input = {" ", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {"|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", " "}},
+		{input = {" ", "~", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {"|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "~", " "}},
+		{input = {" ", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", " ", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {"|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", " ", " "}},
 	}
 
 TestLibTextFilter:CreateTestCases("Parser", testCases, function(input, expected)
@@ -150,7 +160,12 @@ do -- setup evaluation tests
 		{input = {"B", {"A", "-", " "}}, output = {true, LTF.RESULT_OK}},
 		{input = {"ABC", {"A", "B", "C", "-", " ", " ", " "}}, output = {false, LTF.RESULT_OK}},
 		{input = {"ABD", {"A", "B", "C", "-", " ", " ", " "}}, output = {true, LTF.RESULT_OK}},
-		
+
+		-- itemlinks
+		{input = {"ABC", {"|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", " "}}, output = {false, LTF.RESULT_OK}},
+		{input = {"ABC", {"|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "~", " "}}, output = {false, LTF.RESULT_OK}},
+		{input = {"ABC", {"|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", " ", " "}}, output = {false, LTF.RESULT_OK}},
+
 		-- errors
 		{input = {"ABC", {" ", ")-C"}}, output = {false, LTF.RESULT_INVALID_ARGUMENT_COUNT}},
 	}
@@ -212,25 +227,38 @@ do -- setup filter tests
 		{input = {"stendarr's vigilance ginger ale recipe", "ton"}, output = {false, LTF.RESULT_OK}},
 		{input = {"tonal architect tonic recipe", "ton"}, output = {true, LTF.RESULT_OK}},
 		{input = {"rosy disposition tonic recipe", "ton"}, output = {true, LTF.RESULT_OK}},
-		
+
 		{input = {"motif 5: chapter 1: something", "chapter (1+2)"}, output = {true, LTF.RESULT_OK}},
 		{input = {"motif 5: chapter 2: something", "chapter (1+2)"}, output = {true, LTF.RESULT_OK}},
 		{input = {"motif 5: chapter 3: something", "chapter (1+2)"}, output = {false, LTF.RESULT_OK}},
 		{input = {"motif 22: chapter 1: something", "chapter (1+\" 2:\")"}, output = {true, LTF.RESULT_OK}},
 		{input = {"motif 22: chapter 2: something", "chapter (1+\" 2:\")"}, output = {true, LTF.RESULT_OK}},
 		{input = {"motif 22: chapter 3: something", "chapter (1+\" 2:\")"}, output = {false, LTF.RESULT_OK}},
-		
+
 		{input = {"chevre-radish salad with pumpkin seeds recipe", "-(with+rabbit) recipe"}, output = {false, LTF.RESULT_OK}},
 		{input = {"imperial stout recipe", "-(with+rabbit) recipe"}, output = {true, LTF.RESULT_OK}},
 		{input = {"braised rabbit with spring vegetables recipe", "-(with+rabbit) recipe"}, output = {false, LTF.RESULT_OK}},
 		{input = {"garlic cod with potato crust recipe", "-(with+rabbit) recipe"}, output = {false, LTF.RESULT_OK}},
 		{input = {"imperial stout", "-(with+rabbit) recipe"}, output = {false, LTF.RESULT_OK}},
-		
+
 		{input = {"chevre-radish salad with pumpkin seeds recipe", "recipe -(with+rabbit)"}, output = {false, LTF.RESULT_OK}},
 		{input = {"imperial stout recipe", "recipe -(with+rabbit)"}, output = {true, LTF.RESULT_OK}},
 		{input = {"braised rabbit with spring vegetables recipe", "recipe -(with+rabbit)"}, output = {false, LTF.RESULT_OK}},
 		{input = {"garlic cod with potato crust recipe", "recipe -(with+rabbit)"}, output = {false, LTF.RESULT_OK}},
 		{input = {"imperial stout", "recipe -(with+rabbit)"}, output = {false, LTF.RESULT_OK}},
+
+		{input = {"|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {true, LTF.RESULT_OK}},
+		{input = {"|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "-|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {false, LTF.RESULT_OK}},
+		{input = {"|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "~|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {true, LTF.RESULT_OK}},
+		{input = {"|H1:item:64948:362:10:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {false, LTF.RESULT_OK}},
+		{input = {"|H1:item:64948:362:10:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "~|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {true, LTF.RESULT_OK}},
+		{input = {"|H0:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {true, LTF.RESULT_OK}},
+		{input = {"|H0:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "-|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {false, LTF.RESULT_OK}},
+		{input = {"|H0:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "~|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {true, LTF.RESULT_OK}},
+		{input = {"|H0:item:64948:362:10:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {false, LTF.RESULT_OK}},
+		{input = {"|H0:item:64948:362:10:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h", "~|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {true, LTF.RESULT_OK}},
+		{input = {"robe of the arch-mage |H0:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h arch mage", "|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {true, LTF.RESULT_OK}},
+		{input = {"robe of the arch-mage |H0:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h arch mage", "~|H1:item:64948:362:50:0:0:0:0:0:0:0:0:0:0:0:0:1:0:0:0:10000:0|h|h"}, output = {true, LTF.RESULT_OK}},
 	}
 
 TestLibTextFilter:CreateTestCases("Filter", testCases, function(input, expected)

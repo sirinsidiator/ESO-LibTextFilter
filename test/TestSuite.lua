@@ -22,23 +22,12 @@ local function importAddonFiles()
 end
 
 local function mockGlobals()
-	function GetWindowManager()
-		return {}
-	end
-	function GetAnimationManager()
-		return {}
-	end
-	function GetEventManager()
-		return { RegisterForEvent = function() end }
+	zo_strsplit = function(...)
+		return unpack(LuaUnit.private.strsplit(...))
 	end
 end
 
---mockGlobals()
---require('esoui.libraries.globals.globalvars')
---require('esoui.libraries.globals.globalapi')
---require('esoui.libraries.utility.baseobject')
---require('esoui.libraries.utility.zo_tableutils')
---require('esoui.ingamelocalization.localizegeneratedstrings')
+mockGlobals()
 importAddonFiles()
 
 require('LibTextFilterTest')
