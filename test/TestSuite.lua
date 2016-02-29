@@ -25,6 +25,9 @@ local function mockGlobals()
 	zo_strsplit = function(...)
 		return unpack(LuaUnit.private.strsplit(...))
 	end
+	df = function(...)
+		print(string.format(...))
+	end
 end
 
 mockGlobals()
