@@ -58,6 +58,15 @@ local function AndOperation(input, a, b)
 	return (a_ and b_)
 end
 
+local function AndNotOperation(input, a, b)
+	local a_ = Convert(input, a)
+	local b_ = Convert(input, b)
+	if(lib.debug) then
+		Log("AndNot(%s, %s, %s); NOT %s AND %s = %s", ValueToString(input), ValueToString(a), ValueToString(b), ValueToString(a_), ValueToString(b_), ValueToString(not a_ and b_))
+	end
+	return (not a_ and b_)
+end
+
 local function OrOperation(input, a, b)
 	local a_ = Convert(input, a)
 	local b_ = Convert(input, b)
@@ -94,16 +103,20 @@ local function Sanitize(value)
 	return value:gsub("[-*+?^$().[%]%%]", "%%%0") -- escape meta characters
 end
 
+local LEFT_ASSOCIATIVE = 1
+local RIGHT_ASSOCIATIVE = 2
+local NON_ASSOCIATIVE = 3
+
 local OPERATORS = {
-	[" "] = { precedence = 2, isLeftAssociative = true, numArguments = 2, operation = AndOperation, defaultArgument = true },
-	["&"] = { precedence = 2, isLeftAssociative = true, numArguments = 2, operation = AndOperation, defaultArgument = true },
-	["+"] = { precedence = 3, isLeftAssociative = true, numArguments = 2, operation = OrOperation, defaultArgument = false },
-	["/"] = { precedence = 3, isLeftAssociative = true, numArguments = 2, operation = OrOperation, defaultArgument = false },
-	["-"] = { precedence = 4, isLeftAssociative = false, numArguments = 1, operation = NotOperation },
-	["!"] = { precedence = 4, isLeftAssociative = false, numArguments = 1, operation = NotOperation },
-	["^"] = { precedence = 4, isLeftAssociative = false, numArguments = 1, operation = NotOperation },
-	["~"] = { precedence = 5, isLeftAssociative = false, numArguments = 1, operation = LinkGeneralizationOperation },
-	["*"] = { precedence = 5, isLeftAssociative = false, numArguments = 1, operation = LinkGeneralizationOperation },
+	[" "] = { precedence = 2, association = LEFT_ASSOCIATIVE, numArguments = 2, operation = AndOperation, defaultArgument = true },
+	["&"] = { precedence = 2, association = LEFT_ASSOCIATIVE, numArguments = 2, operation = AndOperation, defaultArgument = true },
+	["+"] = { precedence = 3, association = LEFT_ASSOCIATIVE, numArguments = 2, operation = OrOperation, defaultArgument = false },
+	["/"] = { precedence = 3, association = LEFT_ASSOCIATIVE, numArguments = 2, operation = OrOperation, defaultArgument = false },
+	["-"] = { precedence = 3, association = LEFT_ASSOCIATIVE, numArguments = 2, operation = AndNotOperation, defaultArgument = true },
+	["!"] = { precedence = 4, association = NON_ASSOCIATIVE, numArguments = 1, operation = NotOperation },
+	["^"] = { precedence = 4, association = NON_ASSOCIATIVE, numArguments = 1, operation = NotOperation },
+	["~"] = { precedence = 5, association = NON_ASSOCIATIVE, numArguments = 1, operation = LinkGeneralizationOperation },
+	["*"] = { precedence = 5, association = NON_ASSOCIATIVE, numArguments = 1, operation = LinkGeneralizationOperation },
 	["("] = { isLeftParenthesis = true }, -- control operator
 	[")"] = { isRightParenthesis = true }, -- control operator
 	["\""] = {}, -- control operator, will be filtered before parsing
@@ -117,12 +130,18 @@ OPERATOR_PATTERN = table.concat(OPERATOR_PATTERN, "")
 local TOKEN_DUPLICATION_PATTERN = string.format("([%s])", OPERATOR_PATTERN)
 local TOKEN_MATCHING_PATTERN = string.format("([%s])(.-)[%s]", OPERATOR_PATTERN, OPERATOR_PATTERN)
 lib.OPERATORS = OPERATORS
+local DEFAULT_OPERATOR = "+"
 
 function lib:Tokenize(input)
-	input = "+" .. input:gsub(TOKEN_DUPLICATION_PATTERN, "%1%1") .. " "
+	input = DEFAULT_OPERATOR .. input:gsub(TOKEN_DUPLICATION_PATTERN, "%1%1") .. DEFAULT_OPERATOR -- the matching pattern eats one of each token, so we duplicate them and add one to the beginning and end
+	if(lib.debug) then
+		Log(input)
+	end
+
 	local tokens = {}
+	local quoteStack, quoteTerm = {}, ""
 	local inQuotes = false
-	local lastTerm, lastOperator
+	local lastOperator
 
 	for operator, term in (input):gmatch(TOKEN_MATCHING_PATTERN) do
 		if(lib.debug) then
@@ -130,74 +149,101 @@ function lib:Tokenize(input)
 		end
 		if(operator == "\"") then
 			inQuotes = not inQuotes
-			if(inQuotes) then
-				lastTerm = term
+			if(inQuotes) then -- start a new stack for all input value we encounter
+				quoteStack = {term}
 			else
-				if(lastTerm ~= "") then
-					if(not lastOperator and not OPERATORS[tokens[#tokens]]) then -- if there is nothing between two terms in quotes we supply a space
-						tokens[#tokens + 1] = " "
-					else
-						tokens[#tokens + 1] = lastOperator
+				-- combine all values on the stack and add them as a single token
+				if(#quoteStack > 0) then
+					quoteTerm = table.concat(quoteStack, "")
+					if(quoteTerm ~= "") then
+						if(lastOperator) then -- if we have a pending operator, we put it on the stack now
+							tokens[#tokens + 1] = lastOperator
+							lastOperator = nil
+						elseif(not OPERATORS[tokens[#tokens]]) then -- if there is no operator in front of the quote we supply a space
+							tokens[#tokens + 1] = " "
+						end
+						tokens[#tokens + 1] = quoteTerm
 					end
-					tokens[#tokens + 1] = lastTerm
 				end
-				lastOperator = nil
 
-				if(term ~= "") then
+				if(term ~= "") then -- if the quotes are followed by another term, we put a space in between
 					tokens[#tokens + 1] = " "
 					tokens[#tokens + 1] = term
 				end
 			end
-		elseif(inQuotes) then -- collect all terms and operators
-			lastTerm = lastTerm .. operator .. term
+		elseif(inQuotes) then -- collect all terms and operators inside the quotes
+			quoteStack[#quoteStack + 1] = operator
+			quoteStack[#quoteStack + 1] = term
 		else
 			if(operator == "(" or operator == ")") then
 				tokens[#tokens + 1] = lastOperator
 				lastOperator = nil
-				if(term == "") then
+				if(term == "") then -- if the parenthesis have another operator inside, we just push them on the output
 					tokens[#tokens + 1] = operator
 					operator = nil
 				end
-			elseif(not OPERATORS[operator].isLeftAssociative and not lastOperator and tokens[#tokens] ~= "(" and operator ~= "-") then
-				-- allow dash to be used in terms like "some-item-name"
-				lastOperator = " "
 			end
 
 			if(operator ~= nil) then
 				if(term ~= "") then
 					if(operator == "-" and #tokens > 0 and not lastOperator and tokens[#tokens] ~= "(") then
+						-- allow dash to be used in terms like "some-item-name"
 						tokens[#tokens] = tokens[#tokens] .. operator .. term
 					else
-						if(not OPERATORS[operator].isLeftAssociative) then
-							tokens[#tokens + 1] = lastOperator
+						if(tokens[#tokens] == "(" and operator == "-") then
+							-- the user tried to negate the first term inside the parentheses, so we replace it with the actual negate operator
+							operator = "!"
+						end
+
+						if(OPERATORS[operator].numArguments == 1) then
+							-- unary operators don't replace a binary operator
+							if(not lastOperator and tokens[#tokens] ~= "(") then
+								-- if we don't have an operator and are not at the beginning of a parentheses, we supply a space
+								tokens[#tokens + 1] = " "
+							else
+								tokens[#tokens + 1] = lastOperator
+							end
 							tokens[#tokens + 1] = operator
 							lastOperator = nil
-						elseif(tokens[#tokens] ~= "(") then
-							-- left associative operators at the beginning of parenthesis are ignored because they would cause the evaluation to fail
+						elseif(tokens[#tokens] == "(" and OPERATORS[operator].numArguments == 2) then
+						-- binary operators at the beginning of parenthesis are ignored because they would cause the evaluation to fail
+						else
 							tokens[#tokens + 1] = operator
 						end
 						tokens[#tokens + 1] = term
-						-- drop left associative operator if there is another one already
-						if(lastOperator and OPERATORS[lastOperator].isLeftAssociative) then lastOperator = nil end
+
+						if(lastOperator and OPERATORS[lastOperator].numArguments == 2) then
+							-- drop binary operator if there is another one already
+							lastOperator = nil
+						end
 					end
-				elseif(not OPERATORS[operator].isLeftAssociative) then
+				elseif(OPERATORS[operator].numArguments == 1) then
+					-- if there is no term, we just push them
 					tokens[#tokens + 1] = lastOperator
 					tokens[#tokens + 1] = operator
 					lastOperator = nil
 				else
+					-- we store the operator for later use
 					lastOperator = operator
 				end
 			end
 		end
 	end
 
-	if(inQuotes) then
+	if(inQuotes) then -- if the quotes didn't get closed, we do that now
 		tokens[#tokens + 1] = lastOperator
-		if(lastTerm ~= "") then
-			tokens[#tokens + 1] = lastTerm
+		if(#quoteStack > 0) then
+			quoteTerm = table.concat(quoteStack, "")
+			if(quoteTerm ~= "") then
+				tokens[#tokens + 1] = quoteTerm
+			end
 		end
-	elseif(lastOperator == "(" or lastOperator == ")") then
+	elseif(lastOperator == ")") then -- push it for completeness sake
 		tokens[#tokens + 1] = lastOperator
+	end
+
+	if(tokens[1] == DEFAULT_OPERATOR) then
+		table.remove(tokens, 1) -- the first token was just added to get the pattern to work correctly
 	end
 
 	if(lib.debug) then
@@ -230,11 +276,11 @@ function lib:Parse(tokens)
 			elseif(#stack > 0) then
 				local top = stack[#stack]
 				if(lib.debug) then
-					Log("top: %s (%s), operator: %s (%s) %s", ValueToString(top), tostring(top.precedence), ValueToString(operator), tostring(operator.precedence), tostring(operator.isLeftAssociative))
+					Log("top: %s (%s), operator: %s (%s) %s", ValueToString(top), tostring(top.precedence), ValueToString(operator), tostring(operator.precedence), tostring(operator.association))
 				end
 				if(top.precedence ~= nil
-					and ((operator.isLeftAssociative and operator.precedence <= top.precedence)
-					or (not operator.isLeftAssociative and operator.precedence < top.precedence))) then
+					and ((operator.association == LEFT_ASSOCIATIVE and operator.precedence <= top.precedence)
+					or (operator.association == RIGHT_ASSOCIATIVE and operator.precedence < top.precedence))) then
 					output[#output + 1] = table.remove(stack)
 				end
 				stack[#stack + 1] = OPERATORS[token]
@@ -268,7 +314,7 @@ function lib:Evaluate(haystack, parsedTokens)
 		if(type(current) == "table" and current.operation ~= nil) then
 			if(#stack < current.numArguments and current.defaultArgument ~= nil) then
 				-- synthesize an argument to prevent the operation from failing
-				stack[#stack + 1] = current.defaultArgument
+				table.insert(stack, 1, current.defaultArgument)
 			end
 			if(#stack < current.numArguments) then
 				if(lib.debug) then
@@ -288,7 +334,12 @@ function lib:Evaluate(haystack, parsedTokens)
 	end
 
 	if(#stack == 1) then
-		return stack[1], lib.RESULT_OK
+		local result = stack[1]
+		if(type(result) ~= "boolean") then
+			-- if there is only one term and no operators, we just search it directly
+			result = Convert(haystack, result)
+		end
+		return result, lib.RESULT_OK
 	else
 		if(lib.debug) then
 			Log("Invalid value count")
