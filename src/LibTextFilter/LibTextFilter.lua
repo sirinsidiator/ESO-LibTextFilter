@@ -16,6 +16,8 @@ lib.RESULT_INVALID_ARGUMENT_COUNT = 2
 lib.RESULT_INVALID_VALUE_COUNT = 3
 lib.RESULT_INVALID_INPUT = 4
 
+lib.cache = lib.cache or {}
+
 local function ValueToString(value)
 	if(type(value) == "table" and value.token) then
 		return "'" .. value.token .. "'"
@@ -113,8 +115,8 @@ local OPERATORS = {
 	["+"] = { precedence = 3, association = LEFT_ASSOCIATIVE, numArguments = 2, operation = OrOperation, defaultArgument = false },
 	["/"] = { precedence = 3, association = LEFT_ASSOCIATIVE, numArguments = 2, operation = OrOperation, defaultArgument = false },
 	["-"] = { precedence = 3, association = LEFT_ASSOCIATIVE, numArguments = 2, operation = AndNotOperation, defaultArgument = true },
+	["^"] = { precedence = 3, association = LEFT_ASSOCIATIVE, numArguments = 2, operation = AndNotOperation, defaultArgument = true },
 	["!"] = { precedence = 4, association = NON_ASSOCIATIVE, numArguments = 1, operation = NotOperation },
-	["^"] = { precedence = 4, association = NON_ASSOCIATIVE, numArguments = 1, operation = NotOperation },
 	["~"] = { precedence = 5, association = NON_ASSOCIATIVE, numArguments = 1, operation = LinkGeneralizationOperation },
 	["*"] = { precedence = 5, association = NON_ASSOCIATIVE, numArguments = 1, operation = LinkGeneralizationOperation },
 	["("] = { isLeftParenthesis = true }, -- control operator
@@ -349,14 +351,16 @@ function lib:Evaluate(haystack, parsedTokens)
 end
 
 function lib:Filter(haystack, needle)
-	if(#needle:gsub("[-*+?^$().[%]%% ]", "") == 0) then return false, lib.RESULT_INVALID_INPUT end
-	local parsedTokens = self:GetCachedTokens(needle)
+	if(#needle:gsub("[-*+?^$().[%]%% ]", "") == 0) then
+		return false, lib.RESULT_INVALID_INPUT
+	end
+
+	local parsedTokens = lib:GetCachedTokens(needle)
 	if(not parsedTokens) then
-		local tokens = self:Tokenize(needle)
-		parsedTokens = self:Parse(tokens)
+		parsedTokens = lib:Parse(lib:Tokenize(needle))
 		lib:SetCachedTokens(needle, parsedTokens)
 	end
-	return self:Evaluate(haystack, parsedTokens)
+	return lib:Evaluate(haystack, parsedTokens)
 end
 
 function lib:GetCachedTokens(needle)

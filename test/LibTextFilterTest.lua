@@ -1,5 +1,8 @@
 local LuaUnit = require('luaunit')
 local assertEquals = LuaUnit.assertEquals
+local assertTrue = LuaUnit.assertTrue
+local assertNotNil = LuaUnit.assertNotNil
+local assertNil = LuaUnit.assertNil
 
 TestLibTextFilter = {}
 
@@ -343,4 +346,19 @@ TestLibTextFilter:CreateTestCases("Filter", testCases, function(input, expected)
 	assertEquals(resultCode, expectedResultCode)
 	assertEquals(actual, expectedValue)
 end)
+end
+
+function TestLibTextFilter:TestTokenCache()
+	local needle = "test +test"
+	assertNil(LTF.cache[needle])
+	local value1, result1 = LTF:Filter("test", needle)
+	assertNotNil(LTF.cache[needle])
+	assertEquals(#LTF.cache[needle], 3)
+	local value2, result2 = LTF:Filter("test", needle)
+	assertEquals(#LTF.cache[needle], 3)
+	assertNotNil(LTF.cache[needle])
+	assertEquals(result1, LTF.RESULT_OK)
+	assertEquals(result2, LTF.RESULT_OK)
+	assertTrue(value1)
+	assertTrue(value2)
 end
