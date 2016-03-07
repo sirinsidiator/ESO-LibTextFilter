@@ -1,0 +1,3 @@
+title: LibTextFilter
+version: r4
+compatiblity: 1.9

@@ -1,0 +1,80 @@
+LibTextFilter is a powerful text filtering library with an extensive syntax that allows users to filter for exactly the terms they want.
+Compared to ZO_StringSearch it is a lot more flexible and easier to use.
+
+It recognizes a number of operators that can be used to build elaborate filtering terms:
+[LIST]
+[*]' ' (space), '&': combine two words with AND; precedence: 2
+[*]'+', "/": combine two words with OR; precedence: 3
+[*]'-', '^': combine two words with AND, but negate the second one; precedence: 3
+[*]'!': negate the next expression; precedence: 4
+[*]'~', '*': soft match item link (only item id instead of all fields); precedence: 5
+[*]'(', ')': control the order in which operators are evaluated
+[*]'"': filter for an exact term, handling operators in between two double quotes as part of a term
+[/LIST]
+
+Usually the search terms are split along operators, so filtering for "termA+termB" is the same as using "termA +termB".
+There is one exception however: A dash (-) inside a word does not get interpreted like other operators, so you can safely search for "some-item-name" without the need for quotes.
+The filter algorithm is also very forgiving and tries to make the best out of invalid input.
+
+In case a searchTerm should apply to multiple different sources, it is recommended to concatenate them into a single haystack with newline (\n).
+That way all sources are searched at once and it won't accidentally find strings beyond the boundary of one source.
+
+The filter is case sensitive, so you have to take care of putting everything into lower case yourself, if that's what you need.
+Links can be put into lower case without worry as they will still be matched correctly.
+
+[SIZE="5"]Example[/SIZE]
+[highlight="Lua"]
+local LTF = LibStub("LibTextFilter")
+function list:FilterScrollList()
+	local scrollData = ZO_ScrollList_GetDataList(self.list)
+	ZO_ClearNumericallyIndexedTable(scrollData)
+
+	local searchTerm = searchBox:GetText():lower()
+
+	for i = 1, #masterList do
+		local data = masterList[i]
+		if(searchTerm == "" or LTF:Filter(data.name:lower(), searchTerm)) then
+			table.insert(scrollData, ZO_ScrollList_CreateDataEntry(DATA_TYPE, data))
+		end
+	end
+end[/highlight]
+
+[SIZE="5"]API Reference[/SIZE]
+
+[SIZE="4"]EvaluationResult[/SIZE]
+EvaluationResult is an enumeration of the possible return states of an evaluation.
+[B]lib.RESULT_OK[/B]: The evaluation worked without a problem.
+[B]lib.RESULT_INVALID_ARGUMENT_COUNT[/B]: There has been an operator with too little arguments.
+[B]lib.RESULT_INVALID_VALUE_COUNT[/B]: There where left over tokens that could not be matched.
+[B]lib.RESULT_INVALID_INPUT[/B]: The needle was either empty or did contain only operators. This result is only returned by Filter().
+
+[SIZE="4"]Filter[/SIZE]
+[CODE][B]boolean[/B] isMatch, [B]EvaluationResult[/B] result = lib:Filter([B]string[/B] haystack, [B]string[/B] needle)[/CODE]
+This is the main function of the library which combines everything into a simple and easy to use call.
+The function fetches the parsedTokens for a needle from an internal cache, or generates them if they have not been cached yet.
+Afterwards it calls Evaluate and returns the result. Unlike Evaluate it also recognizes if the input is empty and returns RESULT_INVALID_INPUT.
+
+[SIZE="4"]Tokenize[/SIZE]
+[CODE][B]table[/B] tokens = lib:Tokenize([B]string[/B] needle)[/CODE]
+Converts the input string into an array of tokens that will be passed to Parse().
+
+[SIZE="4"]Parse[/SIZE]
+[CODE][B]table[/B] parsedTokens = lib:Parse([B]table[/B] tokens)[/CODE]
+Brings the tokenized input into its reversed polish notation which can be cached and will be passed to Evaluate().
+
+[SIZE="4"]Evaluate[/SIZE]
+[CODE][B]boolean[/B] isMatch, [B]EvaluationResult[/B] result = lib:Evaluate([B]string[/B] haystack, [B]table[/B] parsedTokens)[/CODE]
+Applies the search term to the haystack and returns true if the expression is a match.
+It also returns the evaluation result, which can be used to show the user some feedback in case the search term cannot be evaluated.
+
+[SIZE="4"]GetCachedTokens[/SIZE]
+[CODE][B]table[/B] parsedTokens = lib:GetCachedTokens([B]string[/B] needle)[/CODE]
+Returns the parsedTokens for a needle from the cache if they are already stored, or nil otherwise.
+
+[SIZE="4"]SetCachedTokens[/SIZE]
+[CODE]lib:SetCachedTokens([B]string[/B] needle, [B]table[/B] parsedTokens)[/CODE]
+Stores the parsedTokens for a needle in the cache.
+
+[SIZE="4"]ClearCachedTokens[/SIZE]
+[CODE]lib:ClearCachedTokens()[/CODE]
+Clears all cached parsedTokens.
