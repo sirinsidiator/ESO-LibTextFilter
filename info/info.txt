@@ -1,3 +1,3 @@
 title: LibTextFilter
-version: r4
-compatiblity: 1.9
+version: 1.0.5
+compatiblity: 4.3

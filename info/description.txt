@@ -24,7 +24,7 @@ Links can be put into lower case without worry as they will still be matched cor
 
 [SIZE="5"]Example[/SIZE]
 [highlight="Lua"]
-local LTF = LibStub("LibTextFilter")
+local LTF = LibTextFilter
 function list:FilterScrollList()
 	local scrollData = ZO_ScrollList_GetDataList(self.list)
 	ZO_ClearNumericallyIndexedTable(scrollData)
