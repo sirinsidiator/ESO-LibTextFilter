@@ -15,7 +15,7 @@ function TestLibTextFilter:CreateTestCases(prefix, testCases, testFunction)
 	end
 end
 
-local LTF = LibStub("LibTextFilter")
+local LTF = LibTextFilter
 
 function TestLibTextFilter:setUp()
 	LTF:ClearCachedTokens()
