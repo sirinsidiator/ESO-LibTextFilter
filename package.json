@@ -1,0 +1,5 @@
+{
+    "scripts": {
+        "test": "Taneth src/LibTextFilter.addon LibTextFilter"
+    }
+}
